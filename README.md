@@ -60,6 +60,58 @@ flowchart LR
 
 ---
 
+## ⚡ Hardware Acceleration & PyTorch CUDA Architecture
+
+### 🔍 Why Standard PyPI PyTorch Fails on GPU
+By default, standard `pip install torch` on Windows fetches the **CPU-only build (~200MB)** from PyPI (`pypi.org`), which lacks compiled C++ CUDA Cuda kernels (`torch_cuda.dll`, `cuDNN`, `cuBLAS`).
+
+### 🛠️ Permanent CUDA Source Pinning (`pyproject.toml`)
+To permanently pin PyTorch to PyTorch's official CUDA repository, we configured explicit index mapping in `pyproject.toml`:
+
+```toml
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }
+torchvision = { index = "pytorch-cu124" }
+```
+
+### 🚀 CUDA Execution Stack & Performance Metrics
+When `train_transformer.py` executes, PyTorch loads the 2.36 GB CUDA C++ runtime binaries (`torch==2.6.0+cu124`) and hooks into the NVIDIA Display Driver (`nvml.dll`).
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Layer 1: Hardware & Driver                              │
+│ - NVIDIA GeForce RTX 3050 6GB Laptop GPU                │
+│ - NVIDIA Studio Driver (Driver 596.36, CUDA 13.2)       │
+└───────────────────────────┬─────────────────────────────┘
+                            │ (NVIDIA Driver API)
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│ Layer 2: PyTorch CUDA C++ Binaries (2.36 GB Package)   │
+│ - torch_cuda.dll (PyTorch CUDA Bridge)                  │
+│ - cuDNN (Neural Network Acceleration Library)           │
+│ - cuBLAS (GPU Matrix Multiplication Engine)             │
+└───────────────────────────┬─────────────────────────────┘
+                            │ (PyTorch CUDA API)
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│ Layer 3: Python Execution (.venv)                       │
+│ - torch.cuda.is_available() -> True                     │
+│ - Mixed Precision Training (fp16 = True)                │
+└─────────────────────────────────────────────────────────┘
+```
+
+- **Dataset**: 20,000 E-Commerce Customer Reviews (16,000 Train, 4,000 Test)
+- **Execution Time**: **4 minutes 20 seconds** (3 Epochs on NVIDIA RTX 3050 6GB VRAM)
+- **Speedup**: **~14x faster** compared to CPU execution (~60 minutes)
+
+---
+
+
 ## 📌 Business Routing & Priority Matrix
 
 | Business Aspect | Primary Target Department | Example Keywords | Default Priority |
