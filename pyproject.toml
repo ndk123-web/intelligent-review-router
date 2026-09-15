@@ -1,7 +1,7 @@
 [project]
 name = "ecommerce-review-router"
 version = "0.1.0"
-description = "Add your description here"
+description = "NLP-based e-commerce customer review analyzer and support router"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -17,7 +17,16 @@ dependencies = [
     "seaborn>=0.13.2",
     "sqlalchemy>=2.0.52",
     "streamlit>=1.63.0",
-    "torch>=2.14.0",
-    "torchvision>=0.29.0",
+    "torch",
+    "torchvision",
     "transformers>=5.17.0",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }
+torchvision = { index = "pytorch-cu124" }
