@@ -3,7 +3,10 @@ import json
 import random
 import pandas as pd
 
-# Define target aspects, departments, and sample template phrases
+# Categories & Sources matching IberaSoft schema
+CATEGORIES = ["Electronics", "Software/SaaS", "Home & Kitchen", "Beauty & Personal Care", "Books & Media", "Clothing & Accessories", "Sports & Outdoors", "Other"]
+SOURCES = ["Amazon", "Yelp", "G2", "Capterra", "TrustRadius"]
+
 ASPECT_TAXONOMY = {
     "delivery": {
         "department": "Logistics",
@@ -66,14 +69,6 @@ SINGLE_ASPECT_TEMPLATES = [
     "Great experience! {opinion}."
 ]
 
-MULTI_ASPECT_TEMPLATES = [
-    "The {product} is {pos_opinion}, but {neg_opinion1} and {neg_opinion2}.",
-    "Though {pos_opinion}, {neg_opinion}.",
-    "{neg_opinion1}. Furthermore, {neg_opinion2}.",
-    "I love the {product} - {pos_opinion1} and {pos_opinion2}.",
-    "{pos_opinion}, however {neg_opinion}."
-]
-
 def determine_priority(aspects_with_sentiments):
     has_urgent = any(a in ["payment", "refund_return"] and s == "Negative" for a, s in aspects_with_sentiments)
     neg_count = sum(1 for _, s in aspects_with_sentiments if s == "Negative")
@@ -87,23 +82,25 @@ def determine_priority(aspects_with_sentiments):
     else:
         return "LOW"
 
-def generate_reviews_dataset(num_samples=1500, random_state=42):
+def generate_reviews_dataset(num_samples=20000, random_state=42):
     random.seed(random_state)
     data = []
     
     aspect_keys = list(ASPECT_TAXONOMY.keys())
     
     for i in range(1, num_samples + 1):
-        review_id = f"REV-{i:05d}"
+        review_id = f"rev_{i:06d}"
         product = random.choice(PRODUCTS)
-        is_multi = random.random() < 0.45
+        category = random.choice(CATEGORIES)
+        source = random.choice(SOURCES)
+        is_multi = random.random() < 0.40
         
         selected_aspects = []
         issues = []
         
         if not is_multi:
             aspect = random.choice(aspect_keys)
-            sentiment = random.choices(["Negative", "Positive", "Neutral"], weights=[0.45, 0.45, 0.10])[0]
+            sentiment = random.choices(["Negative", "Positive", "Neutral"], weights=[0.35, 0.40, 0.25])[0]
             opinion_text = random.choice(ASPECT_TAXONOMY[aspect]["opinions"][sentiment])
             
             review_text = random.choice(SINGLE_ASPECT_TEMPLATES).format(product=product, opinion=opinion_text)
@@ -120,8 +117,6 @@ def generate_reviews_dataset(num_samples=1500, random_state=42):
         else:
             num_aspects = random.choice([2, 3])
             chosen_aspects = random.sample(aspect_keys, num_aspects)
-            
-            # Mix sentiments (e.g. positive product, negative delivery/refund)
             sentiments_pool = ["Positive", "Negative", "Negative", "Neutral"]
             
             op_texts = []
@@ -137,20 +132,15 @@ def generate_reviews_dataset(num_samples=1500, random_state=42):
                     "confidence": round(random.uniform(0.82, 0.98), 2)
                 })
             
-            # Build text
             pos_ops = [op for a, s, op in op_texts if s == "Positive"]
             neg_ops = [op for a, s, op in op_texts if s == "Negative"]
-            neu_ops = [op for a, s, op in op_texts if s == "Neutral"]
             
             if pos_ops and neg_ops:
-                if len(neg_ops) >= 2:
-                    review_text = f"The {product} is {pos_ops[0]}, but {neg_ops[0]} and {neg_ops[1]}."
-                else:
-                    review_text = f"The {product} is {pos_ops[0]}, but {neg_ops[0]}."
+                review_text = f"The {product} is {pos_ops[0]}, but {neg_ops[0]}."
             elif neg_ops:
-                review_text = f"I am unhappy with the {product}. {neg_ops[0]} and {neg_ops[1] if len(neg_ops) > 1 else 'it was disappointing'}."
+                review_text = f"I am unhappy with the {product}. {neg_ops[0]}."
             elif pos_ops:
-                review_text = f"Excellent {product}! {pos_ops[0]} and {pos_ops[1] if len(pos_ops) > 1 else 'works great'}."
+                review_text = f"Excellent {product}! {pos_ops[0]}."
             else:
                 review_text = f"Bought the {product}. {op_texts[0][2]}."
                 
@@ -162,15 +152,30 @@ def generate_reviews_dataset(num_samples=1500, random_state=42):
                 overall_sentiment = "Positive"
             else:
                 overall_sentiment = "Neutral"
-                
+
+        # Rating mapping
+        if overall_sentiment == "Positive":
+            label = 2
+            rating = random.choice([4, 5])
+        elif overall_sentiment == "Negative":
+            label = 0
+            rating = random.choice([1, 2])
+        else:
+            label = 1
+            rating = 3
+
         priority = determine_priority(selected_aspects)
         primary_dept = ASPECT_TAXONOMY[selected_aspects[0][0]]["department"] if selected_aspects else "Customer Support"
         
         data.append({
             "review_id": review_id,
-            "product": product,
+            "text": review_text,
             "review": review_text,
+            "label": label,
             "sentiment": overall_sentiment,
+            "rating": rating,
+            "category": category,
+            "source": source,
             "aspects": ",".join([a for a, _ in selected_aspects]),
             "issues_json": json.dumps(issues),
             "department": primary_dept,
@@ -183,8 +188,8 @@ if __name__ == "__main__":
     os.makedirs("data/raw", exist_ok=True)
     os.makedirs("data/processed", exist_ok=True)
     
-    print("Generating dataset...")
-    df = generate_reviews_dataset(num_samples=1500)
+    print("Generating 20,000 IberaSoft-schema dataset...")
+    df = generate_reviews_dataset(num_samples=20000)
     
     raw_path = "data/raw/ecommerce_reviews.csv"
     proc_path = "data/processed/ecommerce_reviews.csv"
@@ -192,10 +197,14 @@ if __name__ == "__main__":
     df.to_csv(raw_path, index=False)
     df.to_csv(proc_path, index=False)
     
-    print(f"Dataset generated successfully!")
-    print(f"Total records: {len(df)}")
-    print(f"Saved to {raw_path} and {proc_path}")
-    print("\nSentiment Distribution:")
-    print(df["sentiment"].value_counts())
-    print("\nPriority Distribution:")
-    print(df["priority"].value_counts())
+    # Save train/val/test splits
+    train_df = df.iloc[:15000]
+    val_df = df.iloc[15000:18000]
+    test_df = df.iloc[18000:]
+    
+    train_df.to_csv("data/processed/train.csv", index=False)
+    val_df.to_csv("data/processed/val.csv", index=False)
+    test_df.to_csv("data/processed/test.csv", index=False)
+    
+    print(f"Dataset generated successfully! Total: {len(df)}")
+    print(f"Splits saved: Train (15,000), Val (3,000), Test (2,000)")
