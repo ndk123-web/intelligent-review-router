@@ -21,7 +21,12 @@ def train_transformer():
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"PyTorch Device: {device}")
-    
+    if device == "cuda":
+        print(f"🚀 Using GPU: {torch.cuda.get_device_name(0)} (CUDA Available)")
+        print(f"VRAM Memory: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.2f} GB")
+    else:
+        print("⚠️ Warning: CUDA GPU not detected, falling back to CPU execution.")
+        
     data_path = "data/processed/ecommerce_reviews.csv"
     if not os.path.exists(data_path):
         data_path = "../data/processed/ecommerce_reviews.csv"
@@ -68,17 +73,18 @@ def train_transformer():
     save_dir = "app/models/trained_model/sentiment"
     os.makedirs(save_dir, exist_ok=True)
     
+    batch_size = 32 if device == "cuda" else 16
     training_args = TrainingArguments(
         output_dir="./distilbert_checkpoints",
         eval_strategy="epoch",
         save_strategy="epoch",
         learning_rate=3e-5,
-        per_device_train_batch_size=16,
-        per_device_eval_batch_size=16,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size,
         num_train_epochs=3,
         weight_decay=0.01,
         logging_steps=20,
-        use_cpu=(device == "cpu"),
+        fp16=(device == "cuda"),
         save_total_limit=1,
         load_best_model_at_end=True,
         metric_for_best_model="f1"
@@ -93,7 +99,7 @@ def train_transformer():
         compute_metrics=compute_metrics
     )
     
-    print("\n[INFO] Fine-tuning DistilBERT model on reviews dataset...")
+    print(f"\n[INFO] Fine-tuning DistilBERT model on {device.upper()}...")
     trainer.train()
     
     print("\nEvaluating model performance on test set...")
