@@ -17,6 +17,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "sqlalchemy>=2.0.52",
     "streamlit>=1.63.0",
+    "spacy>=3.8.0",
     "torch",
     "torchvision",
     "transformers>=5.17.0",
