@@ -11,11 +11,12 @@ flowchart TD
     A[Customer Review Input] --> B[Text Preprocessing & Sentence Clause Splitter]
     
     subgraph ML_Intelligence_Layer ["ML & NLP Intelligence Layer"]
-        B --> C[DistilBERT Fine-Tuned Sentiment Classifier]
-        B --> D[Aspect Term & Opinion Extractor ATE/APC]
+        B --> C[DistilBERT Fine-Tuned Sentiment Classifier\n(Overall Sentiment: Pos / Neu / Neg)]
+        B --> D[spaCy NER & Syntactic Dependency Parser\n(Dynamic Aspect Term Extraction - ATE)]
+        D --> D2[Semantic Department & DistilBERT Polarity\n(Aspect Polarity Classification - APC)]
         
         C -->|Overall Sentiment & Confidence| E[Intelligence Payload]
-        D -->|Aspects, Opinions & Aspect Sentiments| E
+        D2 -->|Dynamic Aspect Entities & Sentiments| E
     end
 
     subgraph Business_Routing_Layer ["Business Routing & Priority Engine"]
@@ -57,6 +58,29 @@ flowchart LR
         Softmax --> Out["Sentiment Probabilities:\n- Negative: 94.2%\n- Neutral: 4.1%\n- Positive: 1.7%"]
     end
 ```
+
+---
+
+## 🔍 Dynamic Aspect-Based Sentiment Analysis (ABSA) via spaCy NER
+
+Instead of relying on rigid, static keyword dictionaries that miss unseen words, our system implements an advanced **2-Stage ML/NLP Aspect Extraction Engine**:
+
+```mermaid
+flowchart LR
+    R["Customer Review Clause\n'The laptop hinge joint is squeaking'"] --> SP["spaCy NLP Engine\n(en_core_web_sm)"]
+    SP --> NC["Syntactic Dependency & Noun Chunks\nExtracts: 'laptop hinge joint'"]
+    NC --> SC["Semantic Department Classifier\nMaps to: Product Support"]
+    R --> DB["Fine-Tuned DistilBERT Model\nClause-level Sentiment & Confidence"]
+    SC & DB --> OUT["Structured Aspect Issue:\n- Aspect: product_quality\n- Entity: 'laptop hinge joint'\n- Sentiment: Negative (0.94)\n- Department: Product Support"]
+```
+
+1. **Stage 1: Dynamic Aspect Term Extraction (ATE)**
+   - Utilizes `spaCy` syntactic dependency parsing (`doc.noun_chunks`) to extract real-world product & service noun entities (e.g. *"battery life"*, *"courier driver"*, *"hinge joint"*, *"customer support agent"*, *"package wrapping"*).
+   - Dynamically captures novel terms and customer phrasing without requiring manual dictionary maintenance.
+
+2. **Stage 2: Aspect Polarity Classification (APC)**
+   - Each extracted aspect clause is passed directly into our fine-tuned **DistilBERT Transformer Model (`SentimentAnalyzer`)**.
+   - Generates exact sentiment (`Positive`, `Negative`, `Neutral`) with calibrated probability confidence scores.
 
 ---
 
