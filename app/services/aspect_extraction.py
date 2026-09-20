@@ -54,8 +54,13 @@ class AspectExtractor:
     3. facebook/bart-large-mnli Zero-Shot Classifier for dynamic Department & Aspect mapping
     4. spaCy Syntactic Dependency Parsing for noun entity extraction
     """
-    def __init__(self, sentiment_analyzer=None):
+    def __init__(self, sentiment_analyzer=None, use_zero_shot: bool = None):
         self.sentiment_analyzer = sentiment_analyzer
+        if use_zero_shot is None:
+            import os
+            self.use_zero_shot = os.getenv("USE_ZERO_SHOT", "true").lower() in ("true", "1", "yes")
+        else:
+            self.use_zero_shot = use_zero_shot
         self._zero_shot_pipeline = None
         try:
             self.nlp = spacy.load("en_core_web_sm")
@@ -65,18 +70,32 @@ class AspectExtractor:
     @property
     def zero_shot(self):
         """Lazy-loaded Zero-Shot classification pipeline to save startup time and memory."""
+        if not self.use_zero_shot:
+            return None
         if self._zero_shot_pipeline is None:
             device = 0 if torch.cuda.is_available() else -1
+            dtype = torch.float16 if torch.cuda.is_available() else torch.float32
             try:
+                # Try loading from local cache first to avoid hanging if network is slow
                 self._zero_shot_pipeline = pipeline(
                     "zero-shot-classification",
                     model=ZERO_SHOT_MODEL,
-                    device=device
+                    device=device,
+                    torch_dtype=dtype,
+                    model_kwargs={"local_files_only": True}
                 )
-            except Exception as e:
-                print(f"Warning: Could not load {ZERO_SHOT_MODEL}: {e}")
-                self._zero_shot_pipeline = False
-        return self._zero_shot_pipeline
+            except Exception:
+                try:
+                    self._zero_shot_pipeline = pipeline(
+                        "zero-shot-classification",
+                        model=ZERO_SHOT_MODEL,
+                        device=device,
+                        torch_dtype=dtype
+                    )
+                except Exception as e:
+                    print(f"Zero-shot model {ZERO_SHOT_MODEL} not available: {e}")
+                    self._zero_shot_pipeline = False
+        return self._zero_shot_pipeline if self._zero_shot_pipeline else None
 
     def _map_entity_to_aspect(self, entity_text: str, clause: str) -> tuple[str, str]:
         """Fallback keyword seed mapping if zero-shot classifier is not available."""
@@ -123,25 +142,35 @@ class AspectExtractor:
                 else:
                     sent, conf = "Neutral", 0.75
 
-            # 3. Department & Aspect Mapping: Zero-Shot Classifier (BART-MNLI)
+            # 3. Sentiment Gatekeeper:
+            # Only actionable (Negative / Neutral) clauses require heavy Zero-Shot classification!
+            # Positive praise clauses use fast semantic seed mapping and are logged for analytics.
+            is_actionable = (sent in ("Negative", "Neutral"))
             aspect, department = None, None
             top_label = None
             top_score = 0.0
 
-            zs = self.zero_shot
-            if zs:
-                try:
-                    res = zs(clause, candidate_labels=CANDIDATE_DEPARTMENTS)
-                    top_label = res["labels"][0]
-                    top_score = round(float(res["scores"][0]), 3)
-                    aspect, department = LABEL_TO_ASPECT.get(top_label, ("product_quality", "Product Support"))
-                except Exception:
+            if is_actionable:
+                zs = self.zero_shot
+                if zs:
+                    try:
+                        res = zs(
+                            clause,
+                            candidate_labels=CANDIDATE_DEPARTMENTS,
+                            hypothesis_template="This customer issue is related to {}."
+                        )
+                        top_label = res["labels"][0]
+                        top_score = round(float(res["scores"][0]), 3)
+                        aspect, department = LABEL_TO_ASPECT.get(top_label, ("product_quality", "Product Support"))
+                    except Exception:
+                        aspect, department = self._map_entity_to_aspect(entity_repr, clause)
+                else:
                     aspect, department = self._map_entity_to_aspect(entity_repr, clause)
             else:
+                # Fast seed mapping for positive feedback
                 aspect, department = self._map_entity_to_aspect(entity_repr, clause)
-
-            # 4. Sentiment Gatekeeper: Positive clauses are logged for feedback/analytics
-            is_actionable = (sent in ("Negative", "Neutral"))
+                top_label = department
+                top_score = 0.90
 
             if aspect not in seen_aspects or is_actionable:
                 seen_aspects.add(aspect)
