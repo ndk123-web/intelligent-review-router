@@ -4,10 +4,11 @@ ASPECT_DEPARTMENT_MAP = {
     "payment": "Payments",
     "refund_return": "Refunds",
     "packaging": "Returns / Replacement",
-    "customer_support": "Customer Support"
+    "customer_support": "Customer Support",
+    "technical_issue": "IT Support"
 }
 
-CRITICAL_ASPECTS = {"payment", "refund_return"}
+CRITICAL_ASPECTS = {"payment", "refund_return", "technical_issue"}
 
 class SupportRouter:
     def route_issues(self, overall_sentiment: str, issues: list[dict]) -> dict:
@@ -18,6 +19,7 @@ class SupportRouter:
             aspect = issue.get("aspect", "product_quality")
             sent = issue.get("sentiment", "Neutral")
             dept = issue.get("department") or ASPECT_DEPARTMENT_MAP.get(aspect, "Customer Support")
+            is_actionable = issue.get("is_actionable", sent in ("Negative", "Neutral"))
             
             if sent == "Negative":
                 negative_aspects.append(aspect)
@@ -28,17 +30,22 @@ class SupportRouter:
                     priority = "MEDIUM"
                 reason = f"Customer reported negative issue regarding {aspect} ('{issue.get('opinion', '')}')"
             elif sent == "Neutral":
-                priority = "LOW"
-                reason = f"Neutral feedback on {aspect}"
+                if is_actionable:
+                    priority = "LOW"
+                    reason = f"Neutral feedback/inquiry on {aspect} ('{issue.get('opinion', '')}')"
+                else:
+                    priority = "LOW"
+                    reason = f"Neutral comment on {aspect}"
             else:
                 priority = "LOW"
-                reason = f"Positive feedback on {aspect}"
+                reason = f"Positive feedback on {aspect} (logged for analytics)"
                 
             routing_list.append({
                 "department": dept,
                 "aspect": aspect,
                 "priority": priority,
-                "reason": reason
+                "reason": reason,
+                "is_actionable": is_actionable
             })
             
         # Calculate overall system priority
@@ -54,11 +61,15 @@ class SupportRouter:
         else:
             overall_priority = "LOW"
             
-        # Select primary department
+        # Select primary department (prefer actionable/higher priority departments)
         if routing_list:
-            # Prefer department with highest priority issue
             priority_weights = {"URGENT": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
-            sorted_routing = sorted(routing_list, key=lambda x: priority_weights.get(x["priority"], 0), reverse=True)
+            # Sort by actionable first, then priority weight
+            sorted_routing = sorted(
+                routing_list,
+                key=lambda x: (1 if x.get("is_actionable", False) else 0, priority_weights.get(x["priority"], 0)),
+                reverse=True
+            )
             primary_department = sorted_routing[0]["department"]
         else:
             primary_department = "Customer Support"
@@ -68,3 +79,4 @@ class SupportRouter:
             "overall_priority": overall_priority,
             "routing": routing_list
         }
+

@@ -1,9 +1,10 @@
+# pyrefly: ignore [missing-import]
 import pytest
 from app.services.aspect_extraction import AspectExtractor
 
 @pytest.fixture
 def extractor():
-    return AspectExtractor()
+    return AspectExtractor(use_zero_shot=False)
 
 def test_single_aspect_extraction(extractor):
     text = "The delivery was delayed by three days."

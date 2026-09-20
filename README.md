@@ -8,31 +8,34 @@ An end-to-end NLP intelligence platform and automated customer support ticket ro
 
 ```mermaid
 flowchart TD
-    A[Customer Review Input] --> B[Text Preprocessing & Sentence Clause Splitter]
+    A["Customer Review Input"] --> B["Text Preprocessing & Smart Clause Splitter<br/>(Splits on punctuation, ', but', ', and', 'and my/the/it...')"]
     
     subgraph ML_Intelligence_Layer ["ML & NLP Intelligence Layer"]
-        B --> C[DistilBERT Fine-Tuned Sentiment Classifier\n(Overall Sentiment: Pos / Neu / Neg)]
-        B --> D[spaCy NER & Syntactic Dependency Parser\n(Dynamic Aspect Term Extraction - ATE)]
-        D --> D2[Semantic Department & DistilBERT Polarity\n(Aspect Polarity Classification - APC)]
+        B --> C["DistilBERT Fine-Tuned Classifier<br/>(Overall & Clause Sentiment: Pos / Neu / Neg)"]
+        C --> GATE{"Sentiment Gatekeeper"}
         
-        C -->|Overall Sentiment & Confidence| E[Intelligence Payload]
-        D2 -->|Dynamic Aspect Entities & Sentiments| E
+        GATE -->|Positive Praise| PRAISE["Log for Product Analytics<br/>Priority: LOW, Non-Actionable"]
+        GATE -->|Negative / Neutral| ZS["Meta facebook/bart-large-mnli<br/>Zero-Shot Department Classifier"]
+        B --> SP["spaCy Syntactic Dependency Parser<br/>Noun Chunk Entity Extraction"]
+        
+        ZS & SP --> E["Structured Aspect Issue Payload"]
+        PRAISE --> E
     end
 
     subgraph Business_Routing_Layer ["Business Routing & Priority Engine"]
-        E --> F[Support Router Logic]
-        F -->|Map Aspects to Depts| G[Logistics / Refunds / Payments / Product Support / Returns / CS]
-        F -->|Calculate Urgency| H[Priority: LOW / MEDIUM / HIGH / URGENT]
-        G & H --> I[Actionable Support Ticket Payload]
+        E --> F["Support Router Logic"]
+        F -->|Map to 7 Depts| G["Logistics / Refunds / Payments / Product Support / Returns / CS / IT Support"]
+        F -->|Calculate Urgency| H["Priority: LOW / MEDIUM / HIGH / URGENT"]
+        G & H --> I["Actionable Support Ticket Payload"]
     end
 
     subgraph Persistence_API_Layer ["Database & API Backend"]
-        I --> J[FastAPI REST API /api/v1/analyze]
-        J --> K[(SQLite DB: ecommerce_router.db)]
+        I --> J["FastAPI REST API /api/v1/analyze"]
+        J --> K[("SQLite DB: ecommerce_router.db")]
     end
 
     subgraph Frontend_UI_Layer ["Interactive Dashboard"]
-        K <--> L[Streamlit Web UI: Live Analyzer, Support Desk Queue, Batch Inspector, Analytics]
+        K <--> L["Streamlit Web UI: Live Analyzer, Support Desk Queue, Batch Inspector, Analytics"]
     end
 ```
 
@@ -43,44 +46,58 @@ flowchart TD
 ```mermaid
 flowchart LR
     subgraph Input_Stage ["1. Input Encoding"]
-        T["Raw Review Text\n'Delivery was late and item broken'"] --> Tok["DistilBert Tokenizer"]
-        Tok --> ID["Token IDs & Attention Masks\n[101, 2637, 2001, 2397, 102]"]
+        T["Raw Review Text<br/>'Delivery was late and item broken'"] --> Tok["DistilBert Tokenizer"]
+        Tok --> ID["Token IDs & Attention Masks<br/>[101, 2637, 2001, 2397, 102]"]
     end
 
     subgraph Backbone_Stage ["2. Pretrained DistilBERT Backbone"]
-        ID --> DB["Pretrained DistilBERT\n(6 Transformer Encoder Layers, 768-dim embeddings)"]
-        DB --> CLS["CLS Token Representation Vector\n(Shape: 1 x 768)"]
+        ID --> DB["Pretrained DistilBERT<br/>(6 Transformer Encoder Layers, 768-dim embeddings)"]
+        DB --> CLS["CLS Token Representation Vector<br/>(Shape: 1 x 768)"]
     end
 
     subgraph Head_Stage ["3. 3-Class Classification Head"]
-        CLS --> Dense["Linear Layer\n(in: 768 -> out: 3)"]
+        CLS --> Dense["Linear Layer<br/>(in: 768 → out: 3)"]
         Dense --> Softmax["Softmax Probability Activation"]
-        Softmax --> Out["Sentiment Probabilities:\n- Negative: 94.2%\n- Neutral: 4.1%\n- Positive: 1.7%"]
+        Softmax --> Out["Sentiment Probabilities:<br/>- Negative: 94.2%<br/>- Neutral: 4.1%<br/>- Positive: 1.7%"]
     end
 ```
 
 ---
 
-## 🔍 Dynamic Aspect-Based Sentiment Analysis (ABSA) via spaCy NER
+## 🔍 Smart Clause Splitting & Zero-Shot ABSA (Meta BART-MNLI)
 
-Instead of relying on rigid, static keyword dictionaries that miss unseen words, our system implements an advanced **2-Stage ML/NLP Aspect Extraction Engine**:
+Instead of relying on rigid, static keyword dictionaries that miss unseen words, our system implements an advanced **3-Stage ML/NLP Aspect Extraction Engine**:
 
 ```mermaid
 flowchart LR
-    R["Customer Review Clause\n'The laptop hinge joint is squeaking'"] --> SP["spaCy NLP Engine\n(en_core_web_sm)"]
-    SP --> NC["Syntactic Dependency & Noun Chunks\nExtracts: 'laptop hinge joint'"]
-    NC --> SC["Semantic Department Classifier\nMaps to: Product Support"]
-    R --> DB["Fine-Tuned DistilBERT Model\nClause-level Sentiment & Confidence"]
-    SC & DB --> OUT["Structured Aspect Issue:\n- Aspect: product_quality\n- Entity: 'laptop hinge joint'\n- Sentiment: Negative (0.94)\n- Department: Product Support"]
+    R["Customer Review Text<br/>'The phone is excellent, but delivery was late and my refund has not arrived.'"] --> CS["1. Smart Clause Splitter<br/>- 'The phone is excellent'<br/>- 'the delivery was very late'<br/>- 'my refund has not arrived.'"]
+    CS --> SENT["2. DistilBERT Sentiment Gatekeeper<br/>- C1: Positive (0.66) → Praise<br/>- C2: Negative (0.78) → Actionable<br/>- C3: Negative (1.00) → Actionable"]
+    SENT --> ZS["3. Meta facebook/bart-large-mnli<br/>Zero-Shot NLI Classification<br/>- C2 → Logistics & Shipping (0.65)<br/>- C3 → Refunds & Returns (0.90)"]
+    ZS --> OUT["Actionable Ticket Output:<br/>- Dept 1: Logistics (MEDIUM)<br/>- Dept 2: Refunds (HIGH)<br/>- Overall Ticket Priority: URGENT"]
 ```
 
-1. **Stage 1: Dynamic Aspect Term Extraction (ATE)**
-   - Utilizes `spaCy` syntactic dependency parsing (`doc.noun_chunks`) to extract real-world product & service noun entities (e.g. *"battery life"*, *"courier driver"*, *"hinge joint"*, *"customer support agent"*, *"package wrapping"*).
-   - Dynamically captures novel terms and customer phrasing without requiring manual dictionary maintenance.
+1. **Stage 1: Smart Clause Splitting (`preprocessing.py`)**
+   - Traditional sentence splitters either fail to break compound sentences or blindly split on every `and` (breaking phrases like *"black and white"*).
+   - Our smart regex splits on:
+     - Sentence boundaries (`.`, `!`, `?`)
+     - Contrast conjunctions with commas (`, but`, `, however`, `, although`, `, yet`)
+     - Coordinating conjunctions (`and`, `or`) **only** when introducing a new subject clause (`and my...`, `and the...`, `and it...`).
 
-2. **Stage 2: Aspect Polarity Classification (APC)**
-   - Each extracted aspect clause is passed directly into our fine-tuned **DistilBERT Transformer Model (`SentimentAnalyzer`)**.
-   - Generates exact sentiment (`Positive`, `Negative`, `Neutral`) with calibrated probability confidence scores.
+2. **Stage 2: Sentiment Gatekeeper**
+   - Each clause is first scored by our fine-tuned **DistilBERT Transformer Model**.
+   - **Positive clauses** are flagged as `is_actionable = False` and logged for product praise analytics (preventing spam tickets for compliments).
+   - **Negative / Neutral clauses** are flagged as `is_actionable = True` and escalated for support routing.
+
+3. **Stage 3: Meta `facebook/bart-large-mnli` Zero-Shot Classification (`aspect_extraction.py`)**
+   - Utilizes Meta's 1.63 GB Zero-Shot NLI sequence classification model accelerated with GPU **float16 (`fp16`)**.
+   - Dynamically categorizes actionable customer complaints into 7 target departments without requiring manual keyword maintenance:
+     - `Logistics & Shipping` $\rightarrow$ **Logistics**
+     - `Product Support & Hardware` $\rightarrow$ **Product Support**
+     - `Payments & Billing` $\rightarrow$ **Payments**
+     - `Refunds & Returns` $\rightarrow$ **Refunds**
+     - `Packaging & Unboxing` $\rightarrow$ **Returns / Replacement**
+     - `Customer Support & Service` $\rightarrow$ **Customer Support**
+     - `IT & Technical App Bugs` $\rightarrow$ **IT Support**
 
 ---
 
@@ -138,16 +155,90 @@ When `train_transformer.py` executes, PyTorch loads the 2.36 GB CUDA C++ runtime
 
 ## 📌 Business Routing & Priority Matrix
 
-| Business Aspect | Primary Target Department | Example Keywords | Default Priority |
+| Business Aspect | Primary Target Department | Example Trigger Concepts | Default Priority |
 | :--- | :--- | :--- | :--- |
-| `delivery` | **Logistics** | delivery, shipping, courier, delayed, late, tracking | `MEDIUM` |
-| `product_quality` | **Product Support** | quality, broken, screen, defective, material, build | `MEDIUM` |
-| `payment` | **Payments** | payment, charged twice, fee, gateway, transaction | `HIGH` / `URGENT` |
-| `refund_return` | **Refunds** | refund, return, money back, pickup, reimbursement | `HIGH` / `URGENT` |
-| `packaging` | **Returns / Replacement** | packaging, box, envelope, bubble wrap, torn | `LOW` |
-| `customer_support` | **Customer Support** | support, representative, agent, email, response | `MEDIUM` |
+| `delivery` | **Logistics** | delivery delay, courier rude, tracking status, shipping arrival | `MEDIUM` |
+| `product_quality` | **Product Support** | defective hardware, screen flicker, broken hinge, battery drain | `MEDIUM` |
+| `payment` | **Payments** | double charge, payment gateway error, unauthorized transaction | `HIGH` / `URGENT` |
+| `refund_return` | **Refunds** | refund not credited, return pickup delayed, money back | `HIGH` / `URGENT` |
+| `technical_issue` | **IT Support** | app crash during checkout, otp not received, login error, website bug | `HIGH` / `URGENT` |
+| `packaging` | **Returns / Replacement** | crushed box, torn bubble wrap, missing seal, damaged parcel | `LOW` |
+| `customer_support` | **Customer Support** | unhelpful support agent, no response to email, call disconnected | `MEDIUM` |
 
-*Note: Reviews with multiple negative critical issues (e.g. Payment failed + Refund pending) are automatically escalated to **`URGENT`**.*
+*Note: Reviews with multiple negative critical issues (e.g. `payment`, `refund_return`, `technical_issue`) automatically escalate to **`URGENT`**.*
+
+---
+
+## 🧪 Verified Live Output Example
+
+When analyzing a multi-issue review:
+> *"The phone is excellent, but the delivery was very late and my refund has not arrived."*
+
+The system outputs the following structured ticket payload:
+
+```json
+{
+  "ticket_id": "TICK-BC2E466F",
+  "review_text": "The phone is excellent, but the delivery was very late and my refund has not arrived.",
+  "overall_sentiment": "Neutral",
+  "overall_confidence": 0.6286,
+  "model_type": "transformer",
+  "issues": [
+    {
+      "aspect": "customer_support",
+      "opinion": "The phone is excellent",
+      "sentiment": "Neutral",
+      "confidence": 0.66,
+      "department": "Customer Support",
+      "is_actionable": true,
+      "zero_shot_label": "Customer Support & Service",
+      "zero_shot_confidence": 0.646
+    },
+    {
+      "aspect": "delivery",
+      "opinion": "the delivery was very late",
+      "sentiment": "Negative",
+      "confidence": 0.78,
+      "department": "Logistics",
+      "is_actionable": true,
+      "zero_shot_label": "Logistics & Shipping",
+      "zero_shot_confidence": 0.645
+    },
+    {
+      "aspect": "refund_return",
+      "opinion": "my refund has not arrived.",
+      "sentiment": "Negative",
+      "confidence": 1.0,
+      "department": "Refunds",
+      "is_actionable": true,
+      "zero_shot_label": "Refunds & Returns",
+      "zero_shot_confidence": 0.897
+    }
+  ],
+  "primary_department": "Refunds",
+  "overall_priority": "URGENT",
+  "routing": [
+    {
+      "department": "Customer Support",
+      "aspect": "customer_support",
+      "priority": "LOW",
+      "reason": "Neutral feedback/inquiry on customer_support ('The phone is excellent')"
+    },
+    {
+      "department": "Logistics",
+      "aspect": "delivery",
+      "priority": "MEDIUM",
+      "reason": "Customer reported negative issue regarding delivery ('the delivery was very late')"
+    },
+    {
+      "department": "Refunds",
+      "aspect": "refund_return",
+      "priority": "HIGH",
+      "reason": "Customer reported negative issue regarding refund_return ('my refund has not arrived.')"
+    }
+  ]
+}
+```
 
 ---
 
