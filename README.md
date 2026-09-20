@@ -8,34 +8,34 @@ An end-to-end NLP intelligence platform and automated customer support ticket ro
 
 ```mermaid
 flowchart TD
-    A[Customer Review Input] --> B[Text Preprocessing & Smart Clause Splitter\n(Splits on punctuation, ', but', ', and', 'and my/the/it...')]
+    A["Customer Review Input"] --> B["Text Preprocessing & Smart Clause Splitter<br/>(Splits on punctuation, ', but', ', and', 'and my/the/it...')"]
     
     subgraph ML_Intelligence_Layer ["ML & NLP Intelligence Layer"]
-        B --> C[DistilBERT Fine-Tuned Classifier\n(Overall & Clause Sentiment: Pos / Neu / Neg)]
-        C --> GATE{Sentiment Gatekeeper}
+        B --> C["DistilBERT Fine-Tuned Classifier<br/>(Overall & Clause Sentiment: Pos / Neu / Neg)"]
+        C --> GATE{"Sentiment Gatekeeper"}
         
-        GATE -->|Positive Praise| PRAISE[Log for Product Analytics\nPriority: LOW, Non-Actionable]
-        GATE -->|Negative / Neutral| ZS[Meta facebook/bart-large-mnli\nZero-Shot Department Classifier]
-        B --> SP[spaCy Syntactic Dependency Parser\nNoun Chunk Entity Extraction]
+        GATE -->|Positive Praise| PRAISE["Log for Product Analytics<br/>Priority: LOW, Non-Actionable"]
+        GATE -->|Negative / Neutral| ZS["Meta facebook/bart-large-mnli<br/>Zero-Shot Department Classifier"]
+        B --> SP["spaCy Syntactic Dependency Parser<br/>Noun Chunk Entity Extraction"]
         
-        ZS & SP --> E[Structured Aspect Issue Payload]
+        ZS & SP --> E["Structured Aspect Issue Payload"]
         PRAISE --> E
     end
 
     subgraph Business_Routing_Layer ["Business Routing & Priority Engine"]
-        E --> F[Support Router Logic]
-        F -->|Map to 7 Depts| G[Logistics / Refunds / Payments / Product Support / Returns / CS / IT Support]
-        F -->|Calculate Urgency| H[Priority: LOW / MEDIUM / HIGH / URGENT]
-        G & H --> I[Actionable Support Ticket Payload]
+        E --> F["Support Router Logic"]
+        F -->|Map to 7 Depts| G["Logistics / Refunds / Payments / Product Support / Returns / CS / IT Support"]
+        F -->|Calculate Urgency| H["Priority: LOW / MEDIUM / HIGH / URGENT"]
+        G & H --> I["Actionable Support Ticket Payload"]
     end
 
     subgraph Persistence_API_Layer ["Database & API Backend"]
-        I --> J[FastAPI REST API /api/v1/analyze]
-        J --> K[(SQLite DB: ecommerce_router.db)]
+        I --> J["FastAPI REST API /api/v1/analyze"]
+        J --> K[("SQLite DB: ecommerce_router.db")]
     end
 
     subgraph Frontend_UI_Layer ["Interactive Dashboard"]
-        K <--> L[Streamlit Web UI: Live Analyzer, Support Desk Queue, Batch Inspector, Analytics]
+        K <--> L["Streamlit Web UI: Live Analyzer, Support Desk Queue, Batch Inspector, Analytics"]
     end
 ```
 
@@ -46,19 +46,19 @@ flowchart TD
 ```mermaid
 flowchart LR
     subgraph Input_Stage ["1. Input Encoding"]
-        T["Raw Review Text\n'Delivery was late and item broken'"] --> Tok["DistilBert Tokenizer"]
-        Tok --> ID["Token IDs & Attention Masks\n[101, 2637, 2001, 2397, 102]"]
+        T["Raw Review Text<br/>'Delivery was late and item broken'"] --> Tok["DistilBert Tokenizer"]
+        Tok --> ID["Token IDs & Attention Masks<br/>[101, 2637, 2001, 2397, 102]"]
     end
 
     subgraph Backbone_Stage ["2. Pretrained DistilBERT Backbone"]
-        ID --> DB["Pretrained DistilBERT\n(6 Transformer Encoder Layers, 768-dim embeddings)"]
-        DB --> CLS["CLS Token Representation Vector\n(Shape: 1 x 768)"]
+        ID --> DB["Pretrained DistilBERT<br/>(6 Transformer Encoder Layers, 768-dim embeddings)"]
+        DB --> CLS["CLS Token Representation Vector<br/>(Shape: 1 x 768)"]
     end
 
     subgraph Head_Stage ["3. 3-Class Classification Head"]
-        CLS --> Dense["Linear Layer\n(in: 768 -> out: 3)"]
+        CLS --> Dense["Linear Layer<br/>(in: 768 → out: 3)"]
         Dense --> Softmax["Softmax Probability Activation"]
-        Softmax --> Out["Sentiment Probabilities:\n- Negative: 94.2%\n- Neutral: 4.1%\n- Positive: 1.7%"]
+        Softmax --> Out["Sentiment Probabilities:<br/>- Negative: 94.2%<br/>- Neutral: 4.1%<br/>- Positive: 1.7%"]
     end
 ```
 
@@ -70,10 +70,10 @@ Instead of relying on rigid, static keyword dictionaries that miss unseen words,
 
 ```mermaid
 flowchart LR
-    R["Customer Review Text\n'The phone is excellent, but delivery was late and my refund has not arrived.'"] --> CS["1. Smart Clause Splitter\n- 'The phone is excellent'\n- 'the delivery was very late'\n- 'my refund has not arrived.'"]
-    CS --> SENT["2. DistilBERT Sentiment Gatekeeper\n- C1: Positive (0.66) -> Praise\n- C2: Negative (0.78) -> Actionable\n- C3: Negative (1.00) -> Actionable"]
-    SENT --> ZS["3. Meta facebook/bart-large-mnli\nZero-Shot NLI Classification\n- C2 -> Logistics & Shipping (0.65)\n- C3 -> Refunds & Returns (0.90)"]
-    ZS --> OUT["Actionable Ticket Output:\n- Dept 1: Logistics (MEDIUM)\n- Dept 2: Refunds (HIGH)\n- Overall Ticket Priority: URGENT"]
+    R["Customer Review Text<br/>'The phone is excellent, but delivery was late and my refund has not arrived.'"] --> CS["1. Smart Clause Splitter<br/>- 'The phone is excellent'<br/>- 'the delivery was very late'<br/>- 'my refund has not arrived.'"]
+    CS --> SENT["2. DistilBERT Sentiment Gatekeeper<br/>- C1: Positive (0.66) → Praise<br/>- C2: Negative (0.78) → Actionable<br/>- C3: Negative (1.00) → Actionable"]
+    SENT --> ZS["3. Meta facebook/bart-large-mnli<br/>Zero-Shot NLI Classification<br/>- C2 → Logistics & Shipping (0.65)<br/>- C3 → Refunds & Returns (0.90)"]
+    ZS --> OUT["Actionable Ticket Output:<br/>- Dept 1: Logistics (MEDIUM)<br/>- Dept 2: Refunds (HIGH)<br/>- Overall Ticket Priority: URGENT"]
 ```
 
 1. **Stage 1: Smart Clause Splitting (`preprocessing.py`)**
